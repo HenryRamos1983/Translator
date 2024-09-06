@@ -114,8 +114,7 @@ def main() -> None:
     updater.start_polling()
     updater.idle()
 
-if __name__ == '__main__':
-    main()
+
 
 # Crear la app de Flask para el puerto falso
 app = Flask(__name__)
@@ -150,3 +149,5 @@ if __name__ == '__main__':
     # Iniciar el bot de Telegram en el hilo principal
     run_bot()
 
+if __name__ == '__main__':
+    main()
