@@ -1,19 +1,36 @@
 import os
+import logging
 from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler, CallbackQueryHandler
 from deep_translator import GoogleTranslator
+from flask import Flask
+import threading
+
+# Configurar logging
+logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
+logger = logging.getLogger(__name__)
 
 # Cargar variables de entorno
-#load_dotenv()
+load_dotenv()
 
 # Obtener el token del archivo .env
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
+logger.info(f"Token loaded: {'*' * (len(TOKEN) - 4) + TOKEN[-4:]}")
 
 # Estados para el ConversationHandler
 TRANSLATING = 0
 
+# Crear una aplicación Flask
+app = Flask(__name__)
+
+@app.route('/')
+def home():
+    logger.info("Home route accessed")
+    return "¡El Bot de Telegram está funcionando!"
+
 def start_translation(update: Update, context: CallbackContext) -> int:
+    logger.info(f"Translation started by user {update.effective_user.id}")
     user_choice = update.message.text
     if user_choice == 'Traducir al Español':
         context.user_data['target_lang'] = 'es'
@@ -31,7 +48,7 @@ def start_translation(update: Update, context: CallbackContext) -> int:
     reply_keyboard = [
         ['Traducir al Español'], 
         ['Traducir al Inglés'],
-        ['/delete']  # Añadimos el botón para borrar el historial
+        ['/delete']
     ]
     update.message.reply_text(
         message,
@@ -40,30 +57,31 @@ def start_translation(update: Update, context: CallbackContext) -> int:
     return TRANSLATING
 
 def translate(update: Update, context: CallbackContext) -> int:
+    logger.info(f"Translating message for user {update.effective_user.id}")
     text_to_translate = update.message.text.strip()
     
-    # Verificar si el usuario está cambiando el modo de traducción
     if text_to_translate in ['Traducir al Español', 'Traducir al Inglés']:
         return start_translation(update, context)
     
     source_lang = context.user_data['source_lang']
     target_lang = context.user_data['target_lang']
 
-    # Guardar el ID del mensaje del usuario
     context.user_data['message_ids'].append(update.message.message_id)
 
     try:
         translated_text = GoogleTranslator(source=source_lang, target=target_lang).translate(text_to_translate)
-        message = update.message.reply_text(f" {translated_text}")
-        context.user_data['message_ids'].append(message.message_id)  # Guardar el ID del mensaje de traducción
+        logger.info(f"Translation successful: '{text_to_translate}' -> '{translated_text}'")
+        message = update.message.reply_text(f"{translated_text}")
+        context.user_data['message_ids'].append(message.message_id)
     except Exception as e:
-        print(f"Error de traducción: {e}")
+        logger.error(f"Translation error: {e}")
         error_message = update.message.reply_text("Lo siento, ocurrió un error al traducir. Por favor, intenta de nuevo.")
         context.user_data['message_ids'].append(error_message.message_id)
 
     return TRANSLATING
 
 def delete_history(update: Update, context: CallbackContext) -> None:
+    logger.info(f"Deleting history for user {update.effective_user.id}")
     query = update.callback_query
     query.answer()
 
@@ -72,17 +90,24 @@ def delete_history(update: Update, context: CallbackContext) -> None:
         try:
             context.bot.delete_message(chat_id=chat_id, message_id=message_id)
         except Exception as e:
-            print(f"Error al borrar mensaje {message_id}: {e}")
+            logger.error(f"Error deleting message {message_id}: {e}")
 
-    context.user_data['message_ids'] = []  # Limpiar la lista de IDs de mensajes
+    context.user_data['message_ids'] = []
     query.edit_message_text("Historial de traducciones borrado.")
 
 def show_delete_button(update: Update, context: CallbackContext) -> None:
+    logger.info(f"Showing delete button for user {update.effective_user.id}")
     keyboard = [[InlineKeyboardButton("Borrar historial", callback_data='delete_history')]]
     reply_markup = InlineKeyboardMarkup(keyboard)
     update.message.reply_text('¿Quieres borrar el historial de traducciones?', reply_markup=reply_markup)
 
+def run_flask():
+    port = int(os.environ.get('PORT', 5000))
+    logger.info(f"Starting Flask server on port {port}")
+    app.run(host='0.0.0.0', port=port)
+
 def main() -> None:
+    logger.info("Starting the bot")
     updater = Updater(TOKEN, use_context=True)
     dispatcher = updater.dispatcher
 
@@ -98,6 +123,9 @@ def main() -> None:
     dispatcher.add_handler(CommandHandler('delete', show_delete_button))
     dispatcher.add_handler(CallbackQueryHandler(delete_history, pattern='^delete_history$'))
 
+    threading.Thread(target=run_flask, daemon=True).start()
+
+    logger.info("Bot is ready to receive messages")
     updater.start_polling()
     updater.idle()
 
