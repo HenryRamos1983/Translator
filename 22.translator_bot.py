@@ -3,19 +3,6 @@ from dotenv import load_dotenv
 from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
 from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler, CallbackQueryHandler
 from deep_translator import GoogleTranslator
-import os
-from flask import Flask
-
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Bot de Telegram activo"
-
-if __name__ == '__main__':
-    port = int(os.environ.get('PORT', 5000))
-    app.run(host='0.0.0.0', port=port)
-
 
 # Cargar variables de entorno
 #load_dotenv()
@@ -113,41 +100,6 @@ def main() -> None:
 
     updater.start_polling()
     updater.idle()
-
-
-
-# Crear la app de Flask para el puerto falso
-app = Flask(__name__)
-
-@app.route('/')
-def home():
-    return "Bot de Telegram activo"
-
-# Función para ejecutar el bot de Telegram
-def run_bot():
-    updater = Updater(TOKEN, use_context=True)
-    dispatcher = updater.dispatcher
-
-    conv_handler = ConversationHandler(
-        entry_points=[MessageHandler(Filters.regex('^(Traducir al Español|Traducir al Inglés)$'), start_translation)],
-        states={
-            TRANSLATING: [MessageHandler(Filters.text & ~Filters.command, translate)]
-        },
-        fallbacks=[MessageHandler(Filters.regex('^(Traducir al Español|Traducir al Inglés)$'), start_translation)]
-    )
-
-    dispatcher.add_handler(conv_handler)
-    updater.start_polling()
-    updater.idle()
-
-# Ejecutar Flask y el bot en paralelo
-if __name__ == '__main__':
-    # Iniciar Flask en un hilo separado
-    flask_thread = threading.Thread(target=lambda: app.run(host='0.0.0.0', port=int(os.environ.get('PORT', 5000))))
-    flask_thread.start()
-
-    # Iniciar el bot de Telegram en el hilo principal
-    run_bot()
 
 if __name__ == '__main__':
     main()
