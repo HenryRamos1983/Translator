@@ -5,7 +5,7 @@ from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, Callb
 from deep_translator import GoogleTranslator
 
 # Cargar variables de entorno
-load_dotenv()
+#load_dotenv()
 
 # Obtener el token del archivo .env
 TOKEN = os.getenv('TELEGRAM_BOT_TOKEN')
