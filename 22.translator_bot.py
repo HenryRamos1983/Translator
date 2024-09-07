@@ -1,13 +1,13 @@
 import os
 import logging
+import time
+import threading
+import requests
 from dotenv import load_dotenv
-from telegram import Update, ReplyKeyboardMarkup, InlineKeyboardButton, InlineKeyboardMarkup
-from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler, CallbackQueryHandler
+from telegram import Update, ReplyKeyboardMarkup
+from telegram.ext import Updater, CommandHandler, MessageHandler, Filters, CallbackContext, ConversationHandler
 from deep_translator import GoogleTranslator
 from flask import Flask
-import threading
-import time
-import requests
 
 # Configurar logging
 logging.basicConfig(format='%(asctime)s - %(name)s - %(levelname)s - %(message)s', level=logging.INFO)
@@ -83,6 +83,13 @@ def translate(update: Update, context: CallbackContext) -> int:
 
     return TRANSLATING
 
+def error_handler(update: Update, context: CallbackContext):
+    logger.error(f"Error occurred: {context.error}")
+    try:
+        raise context.error
+    except Exception as e:
+        logger.exception("Exception while handling an update:", exc_info=e)
+
 def run_flask():
     port = int(os.environ.get('PORT', 5000))
     logger.info(f"Starting Flask server on port {port}")
@@ -97,28 +104,37 @@ def keep_alive_job():
         except Exception as e:
             logger.error(f"Error in keep-alive request: {e}")
 
-def main() -> None:
-    logger.info("Starting the bot")
-    updater = Updater(TOKEN, use_context=True)
-    dispatcher = updater.dispatcher
+def run_bot():
+    while True:
+        try:
+            logger.info("Starting the bot")
+            updater = Updater(TOKEN, use_context=True)
+            dispatcher = updater.dispatcher
 
-    conv_handler = ConversationHandler(
-        entry_points=[CommandHandler('start', start),
-                      MessageHandler(Filters.regex('^(Traducir al Español|Traducir al Inglés)$'), start_translation)],
-        states={
-            TRANSLATING: [MessageHandler(Filters.text & ~Filters.command, translate)]
-        },
-        fallbacks=[MessageHandler(Filters.regex('^(Traducir al Español|Traducir al Inglés)$'), start_translation)]
-    )
+            conv_handler = ConversationHandler(
+                entry_points=[CommandHandler('start', start),
+                              MessageHandler(Filters.regex('^(Traducir al Español|Traducir al Inglés)$'), start_translation)],
+                states={
+                    TRANSLATING: [MessageHandler(Filters.text & ~Filters.command, translate)]
+                },
+                fallbacks=[MessageHandler(Filters.regex('^(Traducir al Español|Traducir al Inglés)$'), start_translation)]
+            )
 
-    dispatcher.add_handler(conv_handler)
+            dispatcher.add_handler(conv_handler)
+            dispatcher.add_error_handler(error_handler)
 
+            logger.info("Bot is ready to receive messages")
+            updater.start_polling()
+            updater.idle()
+        except Exception as e:
+            logger.error(f"Error in bot execution: {e}")
+            logger.info("Restarting bot in 60 seconds...")
+            time.sleep(60)
+
+def main():
     threading.Thread(target=run_flask, daemon=True).start()
     threading.Thread(target=keep_alive_job, daemon=True).start()
-
-    logger.info("Bot is ready to receive messages")
-    updater.start_polling()
-    updater.idle()
+    run_bot()
 
 if __name__ == '__main__':
     main()
